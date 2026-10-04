@@ -1,4 +1,6 @@
 import type {
+  RequestPageOptions,
+  RequestSortKey,
   SessionPageOptions,
   SessionSortKey,
   SortDirection,
@@ -13,6 +15,7 @@ export const dashboardPaths = {
   models: "/models",
   tools: "/tools",
   skills: "/skills",
+  requests: "/requests",
 } as const
 
 export type DashboardPageId = keyof typeof dashboardPaths
@@ -34,13 +37,17 @@ export function dashboardSearchForPage(
   page: DashboardPageId
 ) {
   const next = new URLSearchParams(search)
-  if (page !== "sessions") {
+  if (page !== "sessions" && page !== "requests") {
     next.delete("page")
     next.delete("pageSize")
     next.delete("sort")
     next.delete("direction")
     next.delete("sessionId")
     next.delete("sessionProject")
+  }
+  if (page !== "requests") {
+    next.delete("from")
+    next.delete("to")
   }
   const value = next.toString()
   return value ? `?${value}` : ""
@@ -70,7 +77,42 @@ export const INITIAL_SESSION_PAGE: SessionPageOptions = {
   direction: "desc",
 }
 
+const isoDay = /^\d{4}-\d{2}-\d{2}$/
+
+export function todayString(date = new Date()): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+/** Rejects malformed and overflowing days such as 2026-02-30. */
+function isLocalDay(value: string): boolean {
+  if (!isoDay.test(value)) return false
+  const [year, month, day] = value.split("-").map(Number)
+  const parsed = new Date(year!, month! - 1, day!)
+  return !Number.isNaN(parsed.getTime()) && todayString(parsed) === value
+}
+
+export function INITIAL_REQUEST_PAGE(): RequestPageOptions {
+  const today = todayString()
+  return {
+    from: today,
+    to: today,
+    page: 1,
+    pageSize: 20,
+    sort: "timestamp",
+    direction: "desc",
+  }
+}
+
 const ranges = new Set<StatsRange>(["today", "7d", "30d", "90d", "all"])
+const requestSorts = new Set<RequestSortKey>([
+  "timestamp",
+  "duration",
+  "totalTokens",
+  "cost",
+  "cacheReadTokens",
+])
 const sessionSorts = new Set<SessionSortKey>([
   "name",
   "startedAt",
@@ -135,6 +177,69 @@ export function sessionPageFromSearch(
         ? direction
         : INITIAL_SESSION_PAGE.direction,
   }
+}
+
+export function requestsRequestSearch(
+  filters: StatsFilters,
+  requestPage: RequestPageOptions
+) {
+  const search = statsRequestSearch(filters)
+  search.set("from", requestPage.from)
+  search.set("to", requestPage.to)
+  search.set("page", String(requestPage.page))
+  search.set("sort", requestPage.sort)
+  search.set("direction", requestPage.direction)
+  return search
+}
+
+export function requestPageFromSearch(
+  search: URLSearchParams
+): RequestPageOptions {
+  const defaults = INITIAL_REQUEST_PAGE()
+  const from = search.get("from")
+  const to = search.get("to")
+  const page = Number(search.get("page"))
+  const sort = search.get("sort") as RequestSortKey | null
+  const direction = search.get("direction") as SortDirection | null
+  const first = from && isLocalDay(from) ? from : defaults.from
+  const second = to && isLocalDay(to) ? to : defaults.to
+  return {
+    from: first < second ? first : second,
+    to: first < second ? second : first,
+    pageSize: 20,
+    page: Number.isSafeInteger(page) && page > 0 ? page : 1,
+    sort: sort && requestSorts.has(sort) ? sort : defaults.sort,
+    direction:
+      direction && directions.has(direction) ? direction : defaults.direction,
+  }
+}
+
+export function withRequestPage(
+  search: URLSearchParams,
+  updates: Partial<
+    Pick<
+      RequestPageOptions,
+      "page" | "sort" | "direction" | "from" | "to"
+    >
+  >
+): URLSearchParams {
+  const next = new URLSearchParams(search)
+  const current = requestPageFromSearch(next)
+  const page = updates.page ?? current.page
+  const sort = updates.sort ?? current.sort
+  const direction = updates.direction ?? current.direction
+  const first = updates.from ?? current.from
+  const second = updates.to ?? current.to
+
+  next.set("from", first < second ? first : second)
+  next.set("to", first < second ? second : first)
+  if (page === 1) next.delete("page")
+  else next.set("page", String(page))
+  if (sort === "timestamp") next.delete("sort")
+  else next.set("sort", sort)
+  if (direction === "desc") next.delete("direction")
+  else next.set("direction", direction)
+  return next
 }
 
 export function withFilter(

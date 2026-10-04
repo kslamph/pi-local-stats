@@ -17,6 +17,7 @@ import { CostsPage } from "@/components/dashboard/CostsPage"
 import { DashboardNavigation } from "@/components/dashboard/DashboardNavigation"
 import { ModelsPage } from "@/components/dashboard/ModelsPage"
 import { OverviewPage } from "@/components/dashboard/OverviewPage"
+import { RequestsPage } from "@/components/dashboard/RequestsPage"
 import { SessionsPage } from "@/components/dashboard/SessionsPage"
 import { SkillsPage } from "@/components/dashboard/SkillsPage"
 import { ToolsPage } from "@/components/dashboard/ToolsPage"
@@ -37,14 +38,17 @@ import {
   dashboardPaths,
   dashboardSearchForPage,
   filtersFromSearch,
+  requestPageFromSearch,
   sessionPageFromSearch,
   sessionTraceFromSearch,
   withFilter,
+  withRequestPage,
   withSessionPage,
   withSessionTrace,
 } from "@/lib/dashboard-url"
 import { catalogs, resolveLanguage, useI18n } from "@/lib/i18n"
 import type {
+  RequestSortKey,
   SessionSortKey,
   SortDirection,
   StatsFilters,
@@ -138,6 +142,10 @@ export function App() {
     () => sessionPageFromSearch(searchParams),
     [searchParams]
   )
+  const requestPage = useMemo(
+    () => requestPageFromSearch(searchParams),
+    [searchParams]
+  )
   const traceSelection = useMemo(
     () => sessionTraceFromSearch(searchParams),
     [searchParams]
@@ -149,6 +157,7 @@ export function App() {
     models: t.models,
     tools: t.tools,
     skills: t.skills,
+    requests: t.requests,
   }
   const currentPage = dashboardPageFromPath(location.pathname)
   const currentPageLabel = currentPage ? navigationLabels[currentPage.id] : null
@@ -172,11 +181,15 @@ export function App() {
   const {
     data,
     sessionsData,
+    requestsData,
     error,
     isLoading,
     isSessionsLoading,
+    isRequestsLoading,
     loadedSessionsRequest,
     currentSessionsRequest,
+    loadedRequestsRequest,
+    currentRequestsRequest,
     isRefreshing,
     isSyncing,
     hidingModel,
@@ -190,7 +203,9 @@ export function App() {
   } = useStats(
     filters,
     sessionPage,
-    currentPage?.id === "sessions" && !traceSelection
+    requestPage,
+    currentPage?.id === "sessions" && !traceSelection,
+    currentPage?.id === "requests"
   )
 
   useEffect(() => {
@@ -214,6 +229,27 @@ export function App() {
     setSearchParams,
   ])
 
+  useEffect(() => {
+    if (
+      currentPage?.id !== "requests" ||
+      !requestsData ||
+      loadedRequestsRequest !== currentRequestsRequest ||
+      requestsData.page === requestPage.page
+    )
+      return
+    setSearchParams(
+      (current) => withRequestPage(current, { page: requestsData.page }),
+      { replace: true }
+    )
+  }, [
+    currentPage?.id,
+    currentRequestsRequest,
+    loadedRequestsRequest,
+    requestPage.page,
+    requestsData,
+    setSearchParams,
+  ])
+
   const rangeLabels: Record<StatsRange, string> = {
     today: t.today,
     "7d": t.last7Days,
@@ -229,6 +265,11 @@ export function App() {
   const updateSessionSort = (sort: SessionSortKey, direction: SortDirection) =>
     setSearchParams((current) =>
       withSessionPage(current, { page: 1, sort, direction })
+    )
+
+  const updateRequestSort = (sort: RequestSortKey, direction: SortDirection) =>
+    setSearchParams((current) =>
+      withRequestPage(current, { page: 1, sort, direction })
     )
 
   const handleRemoveModel = async (
@@ -337,21 +378,23 @@ export function App() {
           {currentPage.id !== "sessions" || !traceSelection ? (
             <Card size="sm" className="bg-card/90 backdrop-blur">
               <CardContent className="flex flex-wrap items-center gap-2">
-                <FilterSelect
-                  className="sm:w-48"
-                  label={t.period}
-                  value={filters.range}
-                  includeAll={false}
-                  onChange={(value) =>
-                    updateFilter("range", value as StatsRange)
-                  }
-                  options={Object.entries(rangeLabels).map(
-                    ([value, label]) => ({
-                      value,
-                      label,
-                    })
-                  )}
-                />
+                {currentPage.id !== "requests" ? (
+                  <FilterSelect
+                    className="sm:w-48"
+                    label={t.period}
+                    value={filters.range}
+                    includeAll={false}
+                    onChange={(value) =>
+                      updateFilter("range", value as StatsRange)
+                    }
+                    options={Object.entries(rangeLabels).map(
+                      ([value, label]) => ({
+                        value,
+                        label,
+                      })
+                    )}
+                  />
+                ) : null}
                 <FilterSelect
                   className="sm:w-48"
                   label={t.allProjects}
@@ -497,6 +540,27 @@ export function App() {
                   <SkillsPage
                     data={data}
                     rangeLabel={rangeLabels[filters.range]}
+                  />
+                }
+              />
+              <Route
+                path={dashboardPaths.requests}
+                element={
+                  <RequestsPage
+                    data={requestsData}
+                    requestPage={requestPage}
+                    isLoading={isRequestsLoading}
+                    onPageChange={(page) =>
+                      setSearchParams((current) =>
+                        withRequestPage(current, { page })
+                      )
+                    }
+                    onSortChange={updateRequestSort}
+                    onRangeChange={(from, to) =>
+                      setSearchParams((current) =>
+                        withRequestPage(current, { page: 1, from, to })
+                      )
+                    }
                   />
                 }
               />

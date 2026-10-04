@@ -95,16 +95,28 @@ const sessionPage = {
   sort: "startedAt" as const,
   direction: "desc" as const,
 }
+const requestPage = {
+  from: "2026-10-04",
+  to: "2026-10-04",
+  page: 1,
+  pageSize: 20,
+  sort: "timestamp" as const,
+  direction: "desc" as const,
+}
 const ok = (body: unknown = {}) => ({
   ok: true,
   status: 200,
   json: async () => body,
 })
 
-function render(sessionsActive: boolean, nextFilters: StatsFilters = filters) {
+function render(
+  sessionsActive: boolean,
+  nextFilters: StatsFilters = filters,
+  requestsActive = false
+) {
   hooks.beginRender()
   // eslint-disable-next-line react-hooks/rules-of-hooks -- React is mocked by this hook harness.
-  return useStats(nextFilters, sessionPage, sessionsActive)
+  return useStats(nextFilters, sessionPage, requestPage, sessionsActive, requestsActive)
 }
 
 beforeEach(() => {
@@ -338,6 +350,66 @@ describe("useStats", () => {
       )
     ).toHaveLength(2)
     expect(render(false).error).toBeNull()
+  })
+
+  it("loads the request feed only on its own page", async () => {
+    const fetchMock = vi.fn((input: string | URL) =>
+      String(input).startsWith("/api/sync/initial")
+        ? new Promise(() => undefined)
+        : Promise.resolve(ok({ rows: [], total: 0, page: 1, pageSize: 20 }))
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(false, filters, false)
+    hooks.flushEffects()
+    await Promise.resolve()
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).startsWith("/api/requests")
+      )
+    ).toHaveLength(0)
+
+    render(false, filters, true)
+    hooks.flushEffects()
+    await Promise.resolve()
+
+    const paths = fetchMock.mock.calls.map(([input]) => String(input))
+    expect(paths).toContain(
+      "/api/requests?range=all&from=2026-10-04&to=2026-10-04&page=1&sort=timestamp&direction=desc"
+    )
+  })
+
+  it("does not expose requests loaded for an older range", async () => {
+    const stale = { rows: [{ id: "stale" }], total: 1, page: 1, pageSize: 20 }
+    const fetchMock = vi.fn((input: string | URL) => {
+      const path = String(input)
+      if (path.startsWith("/api/sync/initial"))
+        return new Promise(() => undefined)
+      if (path.startsWith("/api/requests?range=all&from=2026-10-01"))
+        return Promise.reject(new Error("Request feed failed"))
+      return Promise.resolve(
+        ok(path.startsWith("/api/requests") ? stale : {})
+      )
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(false, filters, true)
+    hooks.flushEffects()
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    expect(render(false, filters, true).requestsData).toBe(stale)
+
+    hooks.beginRender()
+    const next = useStats(
+      filters,
+      sessionPage,
+      { ...requestPage, from: "2026-10-01", to: "2026-10-01" },
+      false,
+      true
+    )
+    hooks.flushEffects()
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(next.requestsData).toBeNull()
   })
 
   it("loads cached sessions while the initial sync is pending", async () => {

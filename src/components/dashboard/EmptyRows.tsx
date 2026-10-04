@@ -2,7 +2,7 @@ import { BookOpenIcon, BoxIcon, WrenchIcon } from "lucide-react"
 
 import { useI18n } from "@/lib/i18n"
 
-type EmptyKind = "model" | "session" | "tool" | "skill"
+type EmptyKind = "model" | "request" | "session" | "tool" | "skill"
 
 export function EmptyRows({ kind }: { kind: EmptyKind }) {
   const { messages: t } = useI18n()
@@ -10,6 +10,7 @@ export function EmptyRows({ kind }: { kind: EmptyKind }) {
     kind === "tool" ? WrenchIcon : kind === "skill" ? BookOpenIcon : BoxIcon
   const title = {
     model: t.noRequests,
+    request: t.noRequests,
     session: t.noSessions,
     tool: t.noTools,
     skill: t.noSkills,

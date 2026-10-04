@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import { useI18n } from "@/lib/i18n"
 import {
+  requestsRequestSearch,
   sessionsRequestSearch,
   statsRequestSearch,
   type SessionTraceSelection,
@@ -9,6 +10,8 @@ import {
 import type {
   DeleteModelResult,
   HideModelResult,
+  RequestPageOptions,
+  RequestsResponse,
   SessionPageOptions,
   SessionTraceResponse,
   SessionsResponse,
@@ -128,7 +131,9 @@ export function useSessionTrace(
 export function useStats(
   filters: StatsFilters,
   sessionPage: SessionPageOptions,
-  sessionsActive: boolean
+  requestPage: RequestPageOptions,
+  sessionsActive: boolean,
+  requestsActive: boolean
 ) {
   const { messages: t } = useI18n()
   const [token] = useState(consumeAccessToken)
@@ -137,6 +142,7 @@ export function useStats(
   const initialSyncFailedRef = useRef(false)
   const latestRequestRef = useRef(0)
   const latestSessionsRequestRef = useRef(0)
+  const latestRequestsRequestRef = useRef(0)
   const manualRefreshControllerRef = useRef<AbortController | null>(null)
   const [data, setData] = useState<StatsResponse | null>(null)
   const [sessionsData, setSessionsData] = useState<SessionsResponse | null>(
@@ -145,6 +151,14 @@ export function useStats(
   const [loadedSessionsRequest, setLoadedSessionsRequest] = useState<
     string | null
   >(null)
+  const [requestsData, setRequestsData] = useState<RequestsResponse | null>(
+    null
+  )
+  const [loadedRequestsRequest, setLoadedRequestsRequest] = useState<
+    string | null
+  >(null)
+  const [requestsError, setRequestsError] = useState<string | null>(null)
+  const [isRequestsLoading, setIsRequestsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sessionsError, setSessionsError] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
@@ -232,6 +246,38 @@ export function useStats(
     [filters, sessionPage, t, token]
   )
 
+  const loadRequests = useCallback(
+    async (signal?: AbortSignal) => {
+      const requestId = ++latestRequestsRequestRef.current
+      setIsRequestsLoading(true)
+      setRequestsError(null)
+      const search = requestsRequestSearch(filters, requestPage)
+
+      try {
+        const nextData = await request<RequestsResponse>(
+          `/api/requests?${search}`,
+          token,
+          t.requestFailed,
+          { signal }
+        )
+        if (requestId !== latestRequestsRequestRef.current) return
+        setRequestsData(nextData)
+        setLoadedRequestsRequest(search.toString())
+        setRequestsError(null)
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === "AbortError") return
+        if (requestId === latestRequestsRequestRef.current)
+          setRequestsError(
+            cause instanceof Error ? cause.message : t.statsUnavailable
+          )
+      } finally {
+        if (requestId === latestRequestsRequestRef.current)
+          setIsRequestsLoading(false)
+      }
+    },
+    [filters, requestPage, t, token]
+  )
+
   useEffect(() => {
     const controller = new AbortController()
     void load(controller.signal, hasDataRef.current)
@@ -244,6 +290,13 @@ export function useStats(
     void Promise.resolve().then(() => loadSessions(controller.signal))
     return () => controller.abort()
   }, [loadSessions, sessionsActive])
+
+  useEffect(() => {
+    if (!requestsActive) return
+    const controller = new AbortController()
+    void Promise.resolve().then(() => loadRequests(controller.signal))
+    return () => controller.abort()
+  }, [loadRequests, requestsActive])
 
   const retryInitialSync = useCallback(
     async (signal: AbortSignal) => {
@@ -284,6 +337,7 @@ export function useStats(
       if (stopped || controller.signal.aborted) return
       await load(controller.signal, true)
       if (!stopped && sessionsActive) await loadSessions(controller.signal)
+      if (!stopped && requestsActive) await loadRequests(controller.signal)
       controller = null
       if (!stopped) schedule()
     }
@@ -294,7 +348,15 @@ export function useStats(
       controller?.abort()
       if (timer !== null) window.clearTimeout(timer)
     }
-  }, [bootstrapped, load, loadSessions, retryInitialSync, sessionsActive])
+  }, [
+    bootstrapped,
+    load,
+    loadRequests,
+    loadSessions,
+    requestsActive,
+    retryInitialSync,
+    sessionsActive,
+  ])
 
   useEffect(
     () => () => {
@@ -308,8 +370,9 @@ export function useStats(
       manualRefreshControllerRef.current?.abort()
       manualRefreshControllerRef.current = null
       latestSessionsRequestRef.current += 1
+      latestRequestsRequestRef.current += 1
     },
-    [loadSessions, sessionsActive]
+    [loadRequests, loadSessions, requestsActive, sessionsActive]
   )
 
   const performRefresh = useCallback(async () => {
@@ -326,12 +389,13 @@ export function useStats(
       if (controller.signal.aborted) return
       const requests = [load(controller.signal, true)]
       if (sessionsActive) requests.push(loadSessions(controller.signal))
+      if (requestsActive) requests.push(loadRequests(controller.signal))
       await Promise.all(requests)
     } finally {
       if (manualRefreshControllerRef.current === controller)
         manualRefreshControllerRef.current = null
     }
-  }, [load, loadSessions, retryInitialSync, sessionsActive])
+  }, [load, loadRequests, loadSessions, requestsActive, retryInitialSync, sessionsActive])
 
   const refreshRef = useRef<(() => Promise<void>) | null>(performRefresh)
   useEffect(() => {
@@ -475,16 +539,29 @@ export function useStats(
     filters,
     sessionPage
   ).toString()
+  const currentRequestsRequest = requestsRequestSearch(
+    filters,
+    requestPage
+  ).toString()
 
   return {
     data,
     sessionsData:
       loadedSessionsRequest === currentSessionsRequest ? sessionsData : null,
-    error: syncError ?? error ?? (sessionsActive ? sessionsError : null),
+    requestsData:
+      loadedRequestsRequest === currentRequestsRequest ? requestsData : null,
+    error:
+      syncError ??
+      error ??
+      (sessionsActive ? sessionsError : null) ??
+      (requestsActive ? requestsError : null),
     isLoading,
     isSessionsLoading,
+    isRequestsLoading,
     loadedSessionsRequest,
     currentSessionsRequest,
+    loadedRequestsRequest,
+    currentRequestsRequest,
     isRefreshing,
     isSyncing,
     hidingModel,

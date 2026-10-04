@@ -542,6 +542,78 @@ describe("StatsServer", () => {
         ).status
       ).toBe(400)
 
+      const requestsUrl = new URL("/api/requests", dashboardUrl)
+      expect((await fetch(requestsUrl)).status).toBe(401)
+      const requestsResponse = await fetch(requestsUrl, { headers })
+      expect(requestsResponse.status).toBe(200)
+      const requestsBody = (await requestsResponse.json()) as {
+        page: number
+        pageSize: number
+        total: number
+        totals: { requests: number; cost: number }
+        rows: Array<{
+          id: string
+          provider: string
+          model: string
+          inputTokens: number
+          outputTokens: number
+          cacheReadTokens: number
+          cacheWriteTokens: number
+          isError: boolean
+          durationMs: number
+          cost: number
+          requestCount: number
+        }>
+      }
+      expect(requestsBody).toMatchObject({
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        totals: { requests: 1, cost: 0.01 },
+      })
+      expect(requestsBody.rows[0]).toMatchObject({
+        provider: "test",
+        model: "test-model",
+        inputTokens: 4,
+        outputTokens: 2,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        isError: false,
+        cost: 0.01,
+        requestCount: 1,
+      })
+      expect(typeof requestsBody.rows[0]?.durationMs).toBe("number")
+
+      const futureDay = new Date(Date.now() + 2 * 86_400_000)
+      const future = futureDay.getFullYear() +
+        "-" + String(futureDay.getMonth() + 1).padStart(2, "0") +
+        "-" + String(futureDay.getDate()).padStart(2, "0")
+      const wideUrl = new URL(
+        `/api/requests?from=${future}&to=${future}`,
+        dashboardUrl
+      )
+      const wideBody = (await (
+        await fetch(wideUrl, { headers })
+      ).json()) as { total: number; totals: { requests: number; cost: number } }
+      expect(wideBody).toMatchObject({
+        total: 1,
+        totals: { requests: 1, cost: 2 },
+      })
+      expect(
+        (
+          await fetch(new URL("/api/requests?from=2026-02-30", dashboardUrl), {
+            headers,
+          })
+        ).status
+      ).toBe(400)
+      expect(
+        (
+          await fetch(new URL("/api/requests?sort=provider", dashboardUrl), {
+            headers,
+          })
+        ).status
+      ).toBe(400)
+
       const traceUrl = new URL("/api/session-trace", dashboardUrl)
       traceUrl.searchParams.set("id", "server-session")
       traceUrl.searchParams.set("project", "/work/project")

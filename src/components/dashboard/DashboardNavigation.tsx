@@ -3,6 +3,7 @@ import {
   BotIcon,
   BookOpenIcon,
   CoinsIcon,
+  ListIcon,
   TerminalSquareIcon,
   WrenchIcon,
 } from "lucide-react"
@@ -22,6 +23,7 @@ const icons = {
   models: BotIcon,
   tools: WrenchIcon,
   skills: BookOpenIcon,
+  requests: ListIcon,
 }
 
 interface DashboardNavigationProps {

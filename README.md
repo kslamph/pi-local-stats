@@ -29,6 +29,7 @@ Then run `/stats` inside Pi.
 - Breakdowns by project, provider, and model
 - Tool usage, error rate, and average duration
 - Skill usage detected from `read` calls targeting `SKILL.md`, deduplicated per session
+- Request log with a selectable date range, sortable columns, per-request token, cache, duration, status, and cost detail
 - Navigable pages with direct links and native browser back/forward support
 - URL-backed filters, sorting, and session pagination
 - Per-session timelines with expandable agent-type groups, token totals, overlapping runs, and inspectable events and costs

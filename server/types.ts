@@ -108,6 +108,64 @@ export interface SessionsResponse {
   total: number
 }
 
+export type RequestSortKey =
+  | "timestamp"
+  | "duration"
+  | "totalTokens"
+  | "cost"
+  | "cacheReadTokens"
+
+export interface RequestRange {
+  /** Inclusive local day, YYYY-MM-DD. */
+  from: string
+  /** Inclusive local day, YYYY-MM-DD. */
+  to: string
+}
+
+export interface RequestPageOptions extends RequestRange {
+  page: number
+  pageSize: number
+  sort: RequestSortKey
+  direction: SortDirection
+}
+
+export interface RequestLogRow {
+  id: string
+  sessionId: string
+  project: string
+  label: string
+  timestamp: string
+  provider: string
+  model: string
+  inputTokens: number
+  outputTokens: number | null
+  cacheReadTokens: number
+  cacheWriteTokens: number | null
+  totalTokens: number
+  cost: number
+  isError: boolean
+  durationMs: number
+  /** Greater than 1 when the row accounts for a whole agent run. */
+  requestCount: number
+}
+
+export interface RequestsResponse {
+  rows: RequestLogRow[]
+  page: number
+  pageSize: number
+  total: number
+  range: RequestRange
+  totals: {
+    rows: number
+    requests: number
+    errors: number
+    tokens: number
+    cost: number
+    averageDurationMs: number
+    maxDurationMs: number
+  }
+}
+
 export type SessionTraceSpanKind = "agent" | "request" | "tool"
 
 export interface SessionTraceSpan {

@@ -20,6 +20,10 @@ import {
   parseFilters,
   parseSessionPageOptions,
 } from "./stats.ts"
+import {
+  getRequests,
+  parseRequestPageOptions,
+} from "./requests-page.ts"
 import { SessionSynchronizer } from "./sync.ts"
 import { deleteModelHistory } from "./model-history.ts"
 import type { SyncResult } from "./types.ts"
@@ -303,6 +307,24 @@ export class StatsServer {
             200,
             JSON.stringify(
               getSessions(this.db, parseFilters(url.searchParams), options)
+            ),
+            "application/json; charset=utf-8"
+          )
+        }
+        if (request.method === "GET" && url.pathname === "/api/requests") {
+          const options = parseRequestPageOptions(url.searchParams)
+          if (!options)
+            return this.send(
+              response,
+              400,
+              JSON.stringify({ error: "Invalid request page" }),
+              "application/json; charset=utf-8"
+            )
+          return this.send(
+            response,
+            200,
+            JSON.stringify(
+              getRequests(this.db, parseFilters(url.searchParams), options)
             ),
             "application/json; charset=utf-8"
           )

@@ -9,10 +9,14 @@ import {
   dashboardPaths,
   dashboardSearchForPage,
   filtersFromSearch,
+  requestPageFromSearch,
+  requestsRequestSearch,
   sessionPageFromSearch,
   sessionTraceFromSearch,
   sessionsRequestSearch,
+  todayString,
   withFilter,
+  withRequestPage,
   withSessionPage,
   withSessionTrace,
 } from "../src/lib/dashboard-url.ts"
@@ -24,6 +28,7 @@ const labels = {
   models: "Models",
   tools: "Tools",
   skills: "Skills",
+  requests: "Requests",
 }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -68,6 +73,112 @@ describe("dashboard navigation", () => {
     ).toBe("?range=30d")
     expect(dashboardSearchForPage("?page=2&direction=asc", "sessions")).toBe(
       "?page=2&direction=asc"
+    )
+  })
+
+  it("keeps the request range on its own page and drops it elsewhere", () => {
+    const search =
+      "?range=30d&from=2026-09-28&to=2026-10-04&page=3&sort=duration&direction=asc"
+
+    expect(dashboardSearchForPage(search, "requests")).toBe(search)
+    expect(dashboardSearchForPage(search, "sessions")).toBe(
+      "?range=30d&page=3&sort=duration&direction=asc"
+    )
+    expect(dashboardSearchForPage(search, "overview")).toBe("?range=30d")
+    expect(dashboardPageFromPath("/requests")?.id).toBe("requests")
+  })
+
+  it("reads a validated request range, page and sort from the URL", () => {
+    const today = todayString()
+
+    expect(requestPageFromSearch(new URLSearchParams())).toEqual({
+      from: today,
+      to: today,
+      page: 1,
+      pageSize: 20,
+      sort: "timestamp",
+      direction: "desc",
+    })
+    expect(
+      requestPageFromSearch(
+        new URLSearchParams(
+          "from=2026-01-05&to=2026-01-31&page=4&sort=cost&direction=asc"
+        )
+      )
+    ).toEqual({
+      from: "2026-01-05",
+      to: "2026-01-31",
+      page: 4,
+      pageSize: 20,
+      sort: "cost",
+      direction: "asc",
+    })
+    expect(
+      requestPageFromSearch(
+        new URLSearchParams(
+          "from=2026-13-01&to=yesterday&page=-2&sort=provider&direction=up"
+        )
+      )
+    ).toEqual({
+      from: today,
+      to: today,
+      page: 1,
+      pageSize: 20,
+      sort: "timestamp",
+      direction: "desc",
+    })
+    expect(
+      requestPageFromSearch(
+        new URLSearchParams("from=2026-01-31&to=2026-01-05")
+      ).from
+    ).toBe("2026-01-05")
+  })
+
+  it("keys request responses by filters as well as the range", () => {
+    const page = requestPageFromSearch(
+      new URLSearchParams("from=2026-10-01&to=2026-10-01")
+    )
+    const currentRequest = requestsRequestSearch(
+      { range: "7d", project: "new", provider: "", model: "" },
+      page
+    ).toString()
+    const oldRequest = requestsRequestSearch(
+      { range: "7d", project: "old", provider: "", model: "" },
+      page
+    ).toString()
+
+    expect(currentRequest).toBe(
+      "range=7d&project=new&from=2026-10-01&to=2026-10-01&page=1&sort=timestamp&direction=desc"
+    )
+    expect(oldRequest).not.toBe(currentRequest)
+  })
+
+  it("rewrites request state without losing unrelated filters", () => {
+    const sorted = withRequestPage(
+      new URLSearchParams(
+        "range=7d&project=pi&from=2026-10-01&to=2026-10-04"
+      ),
+      { page: 1, sort: "duration", direction: "desc" }
+    )
+    expect(sorted.toString()).toBe(
+      "range=7d&project=pi&from=2026-10-01&to=2026-10-04&sort=duration"
+    )
+
+    const ranged = withRequestPage(sorted, {
+      page: 1,
+      sort: "timestamp",
+      direction: "desc",
+      from: "2026-10-09",
+      to: "2026-10-01",
+    })
+    expect(ranged.get("from")).toBe("2026-10-01")
+    expect(ranged.get("to")).toBe("2026-10-09")
+    expect(ranged.has("sort")).toBe(false)
+    expect(ranged.has("direction")).toBe(false)
+    expect(ranged.get("project")).toBe("pi")
+
+    expect(withFilter(ranged, "provider", "openai").toString()).toBe(
+      "range=7d&project=pi&from=2026-10-01&to=2026-10-09&provider=openai"
     )
   })
 
