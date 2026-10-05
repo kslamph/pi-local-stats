@@ -162,7 +162,7 @@ export function RequestsTable({
     numeric?: boolean
   }> = [
     { key: "timestamp", label: t.date },
-    { key: null, label: `${t.provider} / ${t.model}` },
+    { key: null, label: `${t.model} / ${t.provider}` },
     { key: "totalTokens", label: t.inputOutputTokens, numeric: true },
     { key: "cacheReadTokens", label: t.cacheReadWrite, numeric: true },
     { key: null, label: t.status },
@@ -225,9 +225,9 @@ export function RequestsTable({
               </TableCell>
               <TableCell>
                 <div className="flex flex-col">
-                  <span className="font-medium">{row.provider}</span>
+                  <span className="font-medium">{row.model}</span>
                   <span className="text-xs text-muted-foreground">
-                    {row.model}
+                    {row.provider}
                   </span>
                 </div>
               </TableCell>

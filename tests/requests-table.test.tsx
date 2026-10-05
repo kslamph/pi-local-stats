@@ -123,7 +123,7 @@ describe("requests table", () => {
     const markup = renderTable()
 
     expect(markup).toContain('aria-label="Sort by Date"')
-    expect(markup).toContain(">Provider / Model</th>")
+    expect(markup).toContain(">Model / Provider</th>")
     expect(markup).toContain('aria-label="Sort by In / out"')
     expect(markup).toContain('aria-label="Sort by Cache r/w"')
     expect(markup).toContain(">Status</th>")
@@ -131,6 +131,9 @@ describe("requests table", () => {
     expect(markup).toContain('aria-label="Sort by Cost"')
     expect(markup).toContain("zenfree")
     expect(markup).toContain("space-bunny-free")
+    expect(markup.indexOf("space-bunny-free")).toBeLessThan(
+      markup.indexOf("zenfree")
+    )
     expect(markup).toContain("18.7K / 252")
     expect(markup).toContain("182 / 0")
     expect(markup).toContain("19.1K")
