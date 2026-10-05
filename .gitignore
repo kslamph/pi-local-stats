@@ -8,8 +8,10 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
 dist-ssr
+# dist/client is committed so git-based installs (pi install git:...) work without a build step
+dist/*
+!dist/client
 playwright-report
 visual-output
 *.local
